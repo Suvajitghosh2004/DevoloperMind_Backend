@@ -20,7 +20,7 @@ router.post('/', contactLimit, async (req, res) => {
 
     await transporter.sendMail({
       from: `"${name}" <${process.env.EMAIL_USER}>`,
-      to: process.env.ADMIN_EMAIL,
+      to: process.env.CONTACT_EMAIL || process.env.EMAIL_USER,
       replyTo: email,
       subject: subject || `Contact from ${name} — DeveloperMind`,
       html: `<h3>New contact from DeveloperMind</h3>
