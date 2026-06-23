@@ -10,17 +10,29 @@ const app = express();
 
 // Security middleware
 app.use(helmet());
+
+// Allow requests from local dev and any configured production frontend URLs.
+// Set CLIENT_URL in Render env vars to your Vercel domain.
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'http://localhost:5173',
+  'http://localhost:3000',
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (origin.endsWith('.vercel.app')) return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
   credentials: true
 }));
-app.use(morgan('dev'));
+
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting — generous in dev, stricter in production.
-// Sensitive routes (login, contact, comments) have their own tighter limiters
-// defined in their respective route files; this is just a global safety net.
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: process.env.NODE_ENV === 'production' ? 300 : 2000,
@@ -55,8 +67,9 @@ app.use('/api/admin/series', require('./routes/admin/series'));
 app.use('/api/admin/media', require('./routes/admin/media'));
 app.use('/api/admin/stats', require('./routes/admin/stats'));
 
-// Health check
-app.get('/health', (req, res) => res.json({ status: 'OK', project: 'DeveloperMind' }));
+// Health check + keep-alive ping for Render free tier
+app.get('/health', (req, res) => res.json({ status: 'OK', project: 'DeveloperMind', env: process.env.NODE_ENV }));
+app.get('/ping', (req, res) => res.send('pong'));
 
 // Error handler
 app.use((err, req, res, next) => {
