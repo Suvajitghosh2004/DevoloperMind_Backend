@@ -1,15 +1,36 @@
 const express = require('express');
 const router = express.Router();
 const Post = require('../models/Post');
+const Category = require('../models/Category');
 const Analytics = require('../models/Analytics');
 
-// GET /api/posts - All published posts (paginated, filterable)
+// Helper — resolve category param to a MongoDB _id.
+// Accepts either a MongoDB ObjectId string OR a category slug.
+async function resolveCategoryId(categoryParam) {
+  if (!categoryParam) return null;
+  // If it looks like a MongoDB ObjectId (24 hex chars), use it directly
+  if (/^[a-f\d]{24}$/i.test(categoryParam)) return categoryParam;
+  // Otherwise treat it as a slug and look it up
+  const cat = await Category.findOne({ slug: categoryParam, isActive: true }).select('_id');
+  return cat ? cat._id : null;
+}
+
+// GET /api/posts
 router.get('/', async (req, res) => {
   try {
     const { page = 1, limit = 12, category, tag, search, series } = req.query;
     const query = { status: 'published' };
 
-    if (category) query.category = category;
+    if (category) {
+      const categoryId = await resolveCategoryId(category);
+      if (categoryId) {
+        query.category = categoryId;
+      } else {
+        // Slug was given but no matching category found — return empty
+        return res.json({ success: true, posts: [], total: 0, pages: 0, page: 1 });
+      }
+    }
+
     if (tag) query.tags = tag;
     if (series) query.series = series;
     if (search) query.$text = { $search: search };
@@ -30,7 +51,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/posts/trending - Most viewed last 7 days
+// GET /api/posts/trending
 router.get('/trending', async (req, res) => {
   try {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -46,7 +67,7 @@ router.get('/trending', async (req, res) => {
   }
 });
 
-// GET /api/posts/featured - Latest featured/top post
+// GET /api/posts/featured
 router.get('/featured', async (req, res) => {
   try {
     const post = await Post.findOne({ status: 'published' })
@@ -59,7 +80,7 @@ router.get('/featured', async (req, res) => {
   }
 });
 
-// GET /api/posts/:slug - Single post
+// GET /api/posts/:slug
 router.get('/:slug', async (req, res) => {
   try {
     const post = await Post.findOne({ slug: req.params.slug, status: 'published' })
@@ -69,14 +90,10 @@ router.get('/:slug', async (req, res) => {
 
     if (!post) return res.status(404).json({ success: false, message: 'Post not found' });
 
-    // Increment views
     post.views += 1;
     await post.save();
-
-    // Track analytics
     await Analytics.create({ post: post._id, ip: req.ip });
 
-    // Get related posts
     const related = await Post.find({
       category: post.category._id,
       status: 'published',
