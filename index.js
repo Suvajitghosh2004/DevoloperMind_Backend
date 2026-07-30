@@ -8,11 +8,8 @@ require('dotenv').config();
 
 const app = express();
 
-// Security middleware
 app.use(helmet());
 
-// Allow requests from local dev and any configured production frontend URLs.
-// Set CLIENT_URL in Render env vars to your Vercel domain.
 const allowedOrigins = [
   process.env.CLIENT_URL,
   'http://localhost:5173',
@@ -42,7 +39,7 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Routes
+// Public API routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/posts', require('./routes/posts'));
 app.use('/api/categories', require('./routes/categories'));
@@ -67,20 +64,37 @@ app.use('/api/admin/series', require('./routes/admin/series'));
 app.use('/api/admin/media', require('./routes/admin/media'));
 app.use('/api/admin/stats', require('./routes/admin/stats'));
 
-// Health check + keep-alive ping for Render free tier
+// SEO routes — served at root level (not under /api)
+app.use('/sitemap.xml', require('./routes/sitemap'));
+app.use('/rss.xml', require('./routes/rss'));
+
+// robots.txt — served dynamically so CLIENT_URL is always current
+app.get('/robots.txt', (req, res) => {
+  const siteUrl = process.env.CLIENT_URL || 'https://developermind.vercel.app';
+  res.setHeader('Content-Type', 'text/plain');
+  res.send(`User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+
+# Sitemaps
+Sitemap: ${siteUrl}/sitemap.xml
+
+# Crawl-delay for well-behaved bots
+Crawl-delay: 10
+`);
+});
+
+// Health + keep-alive
 app.get('/health', (req, res) => res.json({ status: 'OK', project: 'DeveloperMind', env: process.env.NODE_ENV }));
 app.get('/ping', (req, res) => res.send('pong'));
 
 // Error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal server error'
-  });
+  res.status(err.status || 500).json({ success: false, message: err.message || 'Internal server error' });
 });
 
-// Connect DB and start server
 const PORT = process.env.PORT || 5000;
 const seedAdminFromEnv = require('./utils/seedAdmin');
 
