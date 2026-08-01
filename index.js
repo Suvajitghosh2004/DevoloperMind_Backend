@@ -70,18 +70,13 @@ app.use('/rss.xml', require('./routes/rss'));
 
 // robots.txt — served dynamically so CLIENT_URL is always current
 app.get('/robots.txt', (req, res) => {
-  const siteUrl = process.env.CLIENT_URL || 'https://developermind.vercel.app';
+  const siteUrl = process.env.CLIENT_URL || 'https://devolopermind.vercel.app';
   res.setHeader('Content-Type', 'text/plain');
   res.send(`User-agent: *
 Allow: /
 Disallow: /admin
-Disallow: /api/
 
-# Sitemaps
 Sitemap: ${siteUrl}/sitemap.xml
-
-# Crawl-delay for well-behaved bots
-Crawl-delay: 10
 `);
 });
 
