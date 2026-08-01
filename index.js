@@ -10,18 +10,19 @@ const app = express();
 
 app.use(helmet());
 
-const allowedOrigins = [
-  process.env.CLIENT_URL,
-  'http://localhost:5173',
-  'http://localhost:3000',
-].filter(Boolean);
-
+// CORS — only allow your Vercel frontend
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    if (origin.endsWith('.vercel.app')) return callback(null, true);
-    callback(new Error(`CORS: origin ${origin} not allowed`));
+    const allowed = [
+      'https://devolopermind.vercel.app',
+      'http://localhost:5173',
+      'http://localhost:3000',
+    ];
+    if (!origin || allowed.includes(origin) || origin.endsWith('.vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
   },
   credentials: true
 }));
@@ -40,49 +41,44 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // Public API routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/posts', require('./routes/posts'));
-app.use('/api/categories', require('./routes/categories'));
-app.use('/api/comments', require('./routes/comments'));
+app.use('/api/auth',        require('./routes/auth'));
+app.use('/api/posts',       require('./routes/posts'));
+app.use('/api/categories',  require('./routes/categories'));
+app.use('/api/comments',    require('./routes/comments'));
 app.use('/api/subscribers', require('./routes/subscribers'));
-app.use('/api/tools', require('./routes/tools'));
-app.use('/api/news', require('./routes/news'));
-app.use('/api/series', require('./routes/series'));
-app.use('/api/analytics', require('./routes/analytics'));
-app.use('/api/contact', require('./routes/contact'));
-app.use('/api/media', require('./routes/media'));
-app.use('/api/stats', require('./routes/publicStats'));
+app.use('/api/tools',       require('./routes/tools'));
+app.use('/api/news',        require('./routes/news'));
+app.use('/api/series',      require('./routes/series'));
+app.use('/api/analytics',   require('./routes/analytics'));
+app.use('/api/contact',     require('./routes/contact'));
+app.use('/api/media',       require('./routes/media'));
+app.use('/api/stats',       require('./routes/publicStats'));
 
 // Admin routes
-app.use('/api/admin/posts', require('./routes/admin/posts'));
-app.use('/api/admin/categories', require('./routes/admin/categories'));
-app.use('/api/admin/comments', require('./routes/admin/comments'));
+app.use('/api/admin/posts',       require('./routes/admin/posts'));
+app.use('/api/admin/categories',  require('./routes/admin/categories'));
+app.use('/api/admin/comments',    require('./routes/admin/comments'));
 app.use('/api/admin/subscribers', require('./routes/admin/subscribers'));
-app.use('/api/admin/tools', require('./routes/admin/tools'));
-app.use('/api/admin/news', require('./routes/admin/news'));
-app.use('/api/admin/series', require('./routes/admin/series'));
-app.use('/api/admin/media', require('./routes/admin/media'));
-app.use('/api/admin/stats', require('./routes/admin/stats'));
+app.use('/api/admin/tools',       require('./routes/admin/tools'));
+app.use('/api/admin/news',        require('./routes/admin/news'));
+app.use('/api/admin/series',      require('./routes/admin/series'));
+app.use('/api/admin/media',       require('./routes/admin/media'));
+app.use('/api/admin/stats',       require('./routes/admin/stats'));
 
-// SEO routes — served at root level (not under /api)
+// SEO — sitemap and RSS
 app.use('/sitemap.xml', require('./routes/sitemap'));
-app.use('/rss.xml', require('./routes/rss'));
+app.use('/rss.xml',     require('./routes/rss'));
 
-// robots.txt — served dynamically so CLIENT_URL is always current
+// robots.txt — allow all bots, no /api/ block
 app.get('/robots.txt', (req, res) => {
-  const siteUrl = process.env.CLIENT_URL || 'https://devolopermind.vercel.app';
-  res.setHeader('Content-Type', 'text/plain');
-  res.send(`User-agent: *
-Allow: /
-Disallow: /admin
-
-Sitemap: ${siteUrl}/sitemap.xml
-`);
+  const siteUrl = (process.env.CLIENT_URL || 'https://devolopermind.vercel.app').replace(/\/$/, '');
+  res.type('text/plain');
+  res.send(`User-agent: *\nAllow: /\nDisallow: /admin\n\nSitemap: ${siteUrl}/sitemap.xml\n`);
 });
 
-// Health + keep-alive
-app.get('/health', (req, res) => res.json({ status: 'OK', project: 'DeveloperMind', env: process.env.NODE_ENV }));
-app.get('/ping', (req, res) => res.send('pong'));
+// Health check + keep-alive ping
+app.get('/health', (req, res) => res.json({ status: 'ok', env: process.env.NODE_ENV }));
+app.get('/ping',   (req, res) => res.send('pong'));
 
 // Error handler
 app.use((err, req, res, next) => {
