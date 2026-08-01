@@ -4,7 +4,7 @@ const Post = require('../models/Post');
 const Category = require('../models/Category');
 const Series = require('../models/Series');
 
-const SITE_URL = process.env.CLIENT_URL || 'https://developermind.vercel.app';
+const SITE_URL = (process.env.CLIENT_URL || 'https://devolopermind.vercel.app').replace(/\/$/, '');
 
 // GET /sitemap.xml
 router.get('/', async (req, res) => {

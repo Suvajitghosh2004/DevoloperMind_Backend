@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Post = require('../models/Post');
 
-const SITE_URL = process.env.CLIENT_URL || 'https://developermind.vercel.app';
+const SITE_URL = (process.env.CLIENT_URL || 'https://devolopermind.vercel.app').replace(/\/$/, '');
 const SITE_NAME = 'DeveloperMind';
 const SITE_DESC = 'AI, developer tools, startups, and the tech shaping tomorrow.';
 
