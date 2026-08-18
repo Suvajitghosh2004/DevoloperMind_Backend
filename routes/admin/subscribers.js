@@ -1,59 +1,41 @@
 const express = require('express');
 const router = express.Router();
 const Subscriber = require('../../models/Subscriber');
-const nodemailer = require('nodemailer');
-const { protect, adminOnly } = require('../../middleware/auth');
+const rateLimit = require('express-rate-limit');
 
-router.use(protect, adminOnly);
+const subscribeLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 10 });
 
-router.get('/', async (req, res) => {
+function sanitizeText(str) {
+  if (!str) return '';
+  return str.replace(/<[^>]*>/g, '').trim().slice(0, 200);
+}
+
+router.post('/', subscribeLimit, async (req, res) => {
   try {
-    const { page = 1, limit = 50 } = req.query;
-    const total = await Subscriber.countDocuments({ isActive: true });
-    const subscribers = await Subscriber.find({ isActive: true })
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
-    res.json({ success: true, subscribers, total });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
+    const { email, name, source } = req.body;
+    if (!email) return res.status(400).json({ success: false, message: 'Email required' });
 
-// Export CSV
-router.get('/export', async (req, res) => {
-  try {
-    const subscribers = await Subscriber.find({ isActive: true }).select('email name createdAt');
-    const csv = ['email,name,date', ...subscribers.map(s => `${s.email},${s.name || ''},${s.createdAt.toISOString()}`)].join('\n');
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=subscribers.csv');
-    res.send(csv);
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ success: false, message: 'Invalid email address' });
+    }
 
-// Send broadcast email
-router.post('/broadcast', async (req, res) => {
-  try {
-    const { subject, html } = req.body;
-    const subscribers = await Subscriber.find({ isActive: true }).select('email');
-    const emails = subscribers.map(s => s.email);
+    const cleanEmail = email.toLowerCase().trim().slice(0, 254);
+    const cleanName = sanitizeText(name);
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST,
-      port: process.env.EMAIL_PORT,
-      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
-    });
+    const existing = await Subscriber.findOne({ email: cleanEmail });
+    if (existing) {
+      if (existing.isActive) {
+        return res.json({ success: true, message: 'Already subscribed!' });
+      }
+      existing.isActive = true;
+      await existing.save();
+      return res.json({ success: true, message: 'Welcome back! Resubscribed.' });
+    }
 
-    await transporter.sendMail({
-      from: `DeveloperMind <${process.env.EMAIL_USER}>`,
-      bcc: emails,
-      subject,
-      html
-    });
-
-    res.json({ success: true, message: `Broadcast sent to ${emails.length} subscribers` });
+    await Subscriber.create({ email: cleanEmail, name: cleanName, source });
+    res.status(201).json({ success: true, message: "Subscribed! You're on the list." });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
